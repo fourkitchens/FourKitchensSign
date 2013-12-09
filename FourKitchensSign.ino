@@ -17,7 +17,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(40, PIN, NEO_GRB + NEO_KHZ800);
 // Lets set up some colors, and a global color place holder.
 uint32_t white = strip.Color(255, 255, 255);
 uint32_t theGreen = strip.Color(70, 255, 20);
-uint32_t currentColor = strip.Color(0, 0, 0);
+uint32_t currentColor = strip.Color(255, 255, 255);
 
 // General Variables.
 uint32_t startBrightness = 50;
@@ -145,14 +145,17 @@ void sparkleCommand(YunClient client) {
 }
 
 void colorCommand(YunClient client) {
-  int r = 0, g = 0, b = 0;
+  int r = 0, g = 0, b = 0, brightness = 0;
 
   r = client.parseInt();
   if (client.read() == '/') {
     g = client.parseInt();
     client.read();
     b = client.parseInt();
+    client.read();
+    brightness = client.parseInt();
   }
+  strip.setBrightness(brightness);
   currentColor = strip.Color(r, g, b);
   steadyColor(currentColor);
   client.print(F("Current color is: "));
@@ -209,7 +212,7 @@ void breath(long animationInterval) {
   
   if (currentMillis - previousMillis > animationInterval/2) {
     for(uint16_t e=0; e<strip.numPixels(); e++) {
-      strip.setPixelColor(e, white);
+      strip.setPixelColor(e, currentColor);
     }
     brightness = cycleBrightness(10, 125, brightness);
     currentBrightness = brightness;
