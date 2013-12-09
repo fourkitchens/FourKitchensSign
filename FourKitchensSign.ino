@@ -14,14 +14,20 @@
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(40, PIN, NEO_GRB + NEO_KHZ800);
 
-// Lets set up some colors
+// Lets set up some colors, and a global color place holder.
 uint32_t white = strip.Color(255, 255, 255);
+uint32_t theGreen = strip.Color(70, 255, 20);
+uint32_t currentColor = strip.Color(0, 0, 0);
 
 // General Variables.
 uint32_t startBrightness = 50;
 uint32_t currentBrightness = 0;
 long previousMillis = 0;
 long changeInterval = 200;
+
+// State Machie
+enum operatingState { NORMAL = 0, COLOR};
+operatingState opState = NORMAL;
 
 // Listen on default port 5555, the webserver on the Yun
 // will forward there all the HTTP requests for us.
@@ -58,9 +64,16 @@ void loop() {
     client.stop();
   }
 
-
-  // Breathing animation.
-  breath(5);
+  // State Machine.
+  switch (opState) {
+  case NORMAL:
+    // Breathing animation.
+    breath(5);
+    break;
+  case COLOR:
+    steadyColor(currentColor);
+    break;
+  }
 
   // Poll every 50ms
   delay(50); 
@@ -71,12 +84,23 @@ void process(YunClient client) {
   // read the command
   String command = client.readStringUntil('/');
 
+  client.println(command);
   // is "rainbow" command?
   if (command == "rainbow") {
     rainbowCommand(client);
   }
-  if (command == "sparkle") {
+  else if (command == "sparkle") {
     sparkleCommand(client);
+  }
+  else if (command == "color") {
+    colorCommand(client);
+  }
+  else if (command == "normal") {
+    opState = NORMAL;
+    client.println(F("Back to normal"));
+  }
+  else {
+    client.println(F("Invalid Command."));
   }
 }
 
@@ -85,8 +109,9 @@ void rainbowCommand(YunClient client) {
 
   delay = client.parseInt();
   rainbow(delay);
+  client.print(F("Delay: "));
   client.print(delay);
-  client.print(F(" all the ways Double rainbow!"));
+  client.print(F(". All the way Double rainbow!"));
 
 }
 
@@ -108,25 +133,38 @@ void sparkleCommand(YunClient client) {
  
   sparkle(color, repeats, minLeds, maxLeds);
   
-  client.print("Sparkled: ");
-  client.println(repeats);
-  client.print("At least: ");
-  client.println(minLeds);
-  client.print("but no more than: ");
-  client.println(maxLeds);
-  client.println("leds");
+  client.print(F("Sparkled: "));
+  client.print(repeats);
+  client.println(F(" times."));
+  client.print(F("At least: "));
+  client.print(minLeds);
+  client.print(F(" but no more than: "));
+  client.print(maxLeds);
+  client.println(F(" leds at the same time."));
   client.println(color);
 }
+
+void colorCommand(YunClient client) {
+  int r = 0, g = 0, b = 0;
+
+  r = client.parseInt();
+  if (client.read() == '/') {
+    g = client.parseInt();
+    client.read();
+    b = client.parseInt();
+  }
+  currentColor = strip.Color(r, g, b);
+  steadyColor(currentColor);
+  client.print(F("Current color is: "));
+  client.println(currentColor);
+  opState = COLOR;
+}
+
 
 // Animation that "sparkles" Random LEDs.
 void sparkle(int color, int repeats, int minLeds, int maxLeds) {
 
   for (uint16_t j=0; j<repeats; j++) {
-    if (color == 0) {
-      int r = random(128, 255);
-      int g = random(128, 255);
-      int b = random(128, 255);
-    }
     // Reset to current brightness.
     for(uint16_t e=0; e<strip.numPixels(); e++) {
       strip.setPixelColor(e, currentBrightness, currentBrightness, currentBrightness);
@@ -135,8 +173,11 @@ void sparkle(int color, int repeats, int minLeds, int maxLeds) {
       int led = random(strip.numPixels());
       if (color == 0) {
         strip.setPixelColor(led, random(0,255), random(0,255), random(0, 255));
-        Serial.println(strip.getPixelColor(led));
       }
+      if (color == 1) {
+        strip.setPixelColor(led,theGreen);
+      }
+
       else {
         strip.setPixelColor(led, color);
       }     
@@ -146,6 +187,14 @@ void sparkle(int color, int repeats, int minLeds, int maxLeds) {
     delay(random(10, 50));
   }
 
+}
+
+// SteadyColor
+void steadyColor(uint32_t color) {
+  for (uint16_t e=0; e<strip.numPixels(); e++) {
+    strip.setPixelColor(e, color);
+  }
+  strip.show();
 }
 
 // Animation similar to the apple sleep pulse.
@@ -185,7 +234,6 @@ uint32_t cycleBrightness(uint32_t minBrightness, uint32_t maxBrightness, uint32_
     newBrightness--;
   }
   else {
-  //if (currentBrightness < oldBrightness) {
     newBrightness = currentBrightness;
     newBrightness++;
   }
